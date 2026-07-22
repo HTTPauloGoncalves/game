@@ -40,7 +40,8 @@ body { display: grid; place-items: center; }
 }
 
 .start-screen,
-.letter-screen {
+.letter-screen,
+.death-screen {
   position: absolute;
   inset: 0;
   display: flex;
@@ -176,7 +177,7 @@ h1 em { color: #ffad7e; font-style: normal; }
 }
 
 .letter-screen { justify-content: center; padding: 30px; }
-.letter-backdrop { position: absolute; inset: 0; background: rgba(27,19,39,.78); backdrop-filter: blur(8px); }
+.letter-backdrop, .death-backdrop { position: absolute; inset: 0; background: rgba(27,19,39,.78); backdrop-filter: blur(8px); }
 .letter-card {
   position: relative;
   width: min(100%, 350px);
@@ -201,6 +202,23 @@ h1 em { color: #ffad7e; font-style: normal; }
 .letter-body p { font-family: Georgia, serif; font-size: 18px; line-height: 1.55; }
 .letter-body .placeholder-note { font: 9px/1.6 "DM Mono"; color: #a08078; }
 .letter-card .primary-button { min-height: 48px; width: 220px; font-size: 11px; }
+
+.death-screen { justify-content: center; padding: 30px; }
+.death-card {
+  position: relative;
+  width: min(100%, 350px);
+  padding: 48px 28px 30px;
+  color: #fff1df;
+  background: linear-gradient(160deg, #3e2946, #241b34);
+  border: 2px solid #a95d76;
+  border-radius: 8px;
+  box-shadow: 0 20px 60px rgba(0,0,0,.55);
+  animation: letter-open .55s cubic-bezier(.2,.9,.2,1) both;
+}
+.broken-heart { color: #f08a98; font: 52px Georgia, serif; line-height: 1; margin-bottom: 18px; }
+.death-card h2 { margin: 14px 0; color: #ffd7bc; font: 600 25px/1.05 "Pixelify Sans", sans-serif; }
+.death-card p { margin: 0 auto 28px; color: #cdbdce; font-size: 11px; line-height: 1.7; }
+.death-card .primary-button { width: 240px; }
 
 [hidden] { display: none !important; }
 @keyframes letter-open { from { opacity: 0; transform: translateY(50px) scale(.88) rotate(2deg); } }

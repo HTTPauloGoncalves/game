@@ -11,19 +11,19 @@
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <main class="game-shell" aria-label="Jogo Um Caminho Até Você">
-    <canvas id="game" width="390" height="844" aria-label="Fase do jogo"></canvas>
+  <main class="game-shell" aria-label="Jogo de Bruna e Paulo">
+    <canvas id="game" width="390" height="844" aria-label="Fase de Bruna até Paulo"></canvas>
 
     <section class="start-screen" id="startScreen">
       <div class="eyebrow">UMA PEQUENA JORNADA</div>
       <h1>Um caminho<br /><em>até você</em></h1>
-      <p>Ajude Lina a atravessar o jardim, enfrentar os espinhos e evoluir o poder das rosas.</p>
+      <p>Ajude Bruna a atravessar o jardim, enfrentar os espinhos e chegar até Paulo.</p>
       <button class="primary-button" id="startButton">COMEÇAR <span>→</span></button>
       <small>Use os botões ou as setas do teclado</small>
     </section>
 
     <header class="hud" id="hud" hidden>
-      <div class="heart-count"><span>♥</span> <b id="heartCount">0</b><small>/ 8</small></div>
+      <div class="heart-count"><span>♥</span> <b id="heartCount">1</b><small id="heartMax">/ 1</small></div>
       <div class="journey"><span id="progressFill"></span></div>
       <button class="sound" id="soundButton" aria-label="Ativar ou desativar som">♪</button>
       <div class="power-badge" id="powerBadge">ROSA SINGELA</div>
@@ -46,12 +46,23 @@
       <div class="letter-backdrop"></div>
       <div class="letter-card">
         <div class="wax-seal">♥</div>
-        <div class="letter-heading">PARA VOCÊ</div>
+        <div class="letter-heading">DE PAULO PARA BRUNA</div>
         <div class="letter-body">
           <p id="letterText">O texto especial da sua carta vai aparecer aqui.</p>
           <p class="placeholder-note">— Envie a mensagem quando quiser e eu coloco neste espaço ♥</p>
         </div>
         <button class="primary-button" id="replayButton">JOGAR DE NOVO</button>
+      </div>
+    </section>
+
+    <section class="death-screen" id="deathScreen" hidden>
+      <div class="death-backdrop"></div>
+      <div class="death-card">
+        <div class="broken-heart">♡</div>
+        <div class="eyebrow">O CAMINHO AINDA NÃO TERMINOU</div>
+        <h2>O amor sempre encontra<br />um jeito de recomeçar.</h2>
+        <p>Respire fundo. Algumas histórias bonitas precisam de mais de uma tentativa.</p>
+        <button class="primary-button" id="restartButton">VOLTAR AO INÍCIO</button>
       </div>
     </section>
   </main>

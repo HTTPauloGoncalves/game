@@ -9,10 +9,13 @@ const ui = {
   controls: document.querySelector('#controls'),
   hint: document.querySelector('#hint'),
   hearts: document.querySelector('#heartCount'),
+  heartMax: document.querySelector('#heartMax'),
   progress: document.querySelector('#progressFill'),
   power: document.querySelector('#powerBadge'),
   letter: document.querySelector('#letterScreen'),
   replay: document.querySelector('#replayButton'),
+  death: document.querySelector('#deathScreen'),
+  restart: document.querySelector('#restartButton'),
   sound: document.querySelector('#soundButton')
 };
 
@@ -23,13 +26,16 @@ outfitAtlasA.src = 'assets/hero-outfits-a.png';
 const friendImage = new Image();
 friendImage.src = 'assets/letter-giver.png';
 
-const WORLD_WIDTH = 4800;
+const WORLD_WIDTH = 6100;
 const GROUND_Y = 678;
 const FINISH_X = 4580;
 const FRIEND_X = 4660;
+const PORTAL_X = 4075;
+const ARENA_LEFT = 5160;
+const ARENA_RIGHT = 5920;
 const GROUND_SEGMENTS = [
   [0, 640], [775, 1340], [1495, 2160], [2300, 2920],
-  [3075, 3650], [3810, 4800]
+  [3075, 3650], [3810, 4800], [5080, 6000]
 ];
 const CHECKPOINTS = [80, 840, 1570, 2370, 3150, 3890];
 const DRESS_COLORS = ['#ef704f', '#d94b5e', '#e85d9a', '#9a66d6', '#567fe0', '#3fa99a', '#e3aa3e', '#f1b4d2', '#fff0a8'];
@@ -43,6 +49,13 @@ const POSE_ANCHORS = [
   { x: 14, y: 2 },
   { x: 20, y: 0 }
 ];
+const RUN_SEQUENCE = [2, 3, 4, 5, 4, 3];
+const RUN_ANCHORS = {
+  2: { x: 20, y: -8 },
+  3: { x: 12, y: -8 },
+  4: { x: 0, y: -8 },
+  5: { x: 3, y: -8 }
+};
 
 const platforms = [
   { x: 340, y: 592, w: 145, h: 18 }, { x: 535, y: 525, w: 105, h: 18 },
@@ -55,12 +68,14 @@ const platforms = [
   { x: 2950, y: 535, w: 110, h: 18 }, { x: 3125, y: 585, w: 145, h: 18 },
   { x: 3370, y: 510, w: 125, h: 18 }, { x: 3570, y: 585, w: 95, h: 18 },
   { x: 3700, y: 530, w: 100, h: 18 }, { x: 3855, y: 585, w: 140, h: 18 },
-  { x: 4100, y: 520, w: 130, h: 18 }
+  { x: 4100, y: 520, w: 130, h: 18 },
+  { x: 5260, y: 565, w: 120, h: 18 }, { x: 5430, y: 475, w: 125, h: 18 },
+  { x: 5600, y: 570, w: 115, h: 18 }, { x: 5750, y: 490, w: 105, h: 18 }
 ];
 
 const heartItems = [
   { x: 410, y: 548 }, { x: 875, y: 510 }, { x: 1330, y: 478 }, { x: 1818, y: 453 },
-  { x: 2420, y: 543 }, { x: 2658, y: 473 }, { x: 3430, y: 468 }, { x: 4158, y: 478 }
+  { x: 2420, y: 543 }, { x: 2658, y: 473 }, { x: 3430, y: 468 }, { x: 4025, y: 555 }
 ];
 
 const puddles = [
@@ -80,14 +95,14 @@ const ENEMY_DEFS = [
   { type: 'mushroom', x: 3220, hp: 5 },
   { type: 'thorn', x: 3480, range: 95, hp: 5 },
   { type: 'bat', x: 3940, y: 445, range: 135, hp: 5 },
-  { type: 'guardian', x: 4350, range: 135, hp: 18 }
+  { type: 'guardian', x: 5650, range: 150, hp: 450 }
 ];
 
 const keys = { left: false, right: false };
 const hero = {
   x: 80, y: GROUND_Y - 74, w: 44, h: 72, vx: 0, vy: 0,
   grounded: true, facing: 1, anim: 0, invulnerable: 0, shootCooldown: 0,
-  attackTimer: 0, pendingShot: null, checkpoint: 80
+  attackTimer: 0, pendingShot: null, checkpoint: 80, hp: 1, maxHp: 1
 };
 
 let state = 'title';
@@ -102,15 +117,18 @@ let enemyShots = [];
 let enemies = [];
 let banner = { text: '', time: 0 };
 let screenShake = 0;
+let arenaState = 'waiting';
+let arenaTimer = 0;
 
 function createEnemies() {
   return ENEMY_DEFS.map((d, index) => {
-    const sizes = { thorn: [42, 36], bat: [40, 30], mushroom: [38, 46], guardian: [72, 78] };
+    const sizes = { thorn: [42, 36], bat: [40, 30], mushroom: [38, 46], guardian: [96, 104] };
     const [w, h] = sizes[d.type];
     return {
       ...d, id: index, baseX: d.x, baseY: d.y || GROUND_Y - h,
       x: d.x, y: d.y || GROUND_Y - h, w, h, vx: d.type === 'guardian' ? -52 : -38,
-      hp: d.hp, maxHp: d.hp, alive: true, hurt: 0, shoot: 1 + Math.random() * 2
+      hp: d.hp, maxHp: d.hp, alive: true, hurt: 0, shoot: 1 + Math.random() * 2,
+      phaseTwo: false, announced: false
     };
   });
 }
@@ -118,18 +136,20 @@ function createEnemies() {
 function reset() {
   Object.assign(hero, {
     x: 80, y: GROUND_Y - 74, vx: 0, vy: 0, grounded: true, facing: 1,
-    invulnerable: 0, shootCooldown: 0, attackTimer: 0, pendingShot: null, checkpoint: 80
+    invulnerable: 0, shootCooldown: 0, attackTimer: 0, pendingShot: null,
+    checkpoint: 80, hp: 1, maxHp: 1
   });
   heartItems.forEach(h => h.got = false);
   heartsFound = 0; camera = 0; particles = []; projectiles = []; enemyShots = [];
   enemies = createEnemies(); banner.time = 0; screenShake = 0;
-  ui.hearts.textContent = '0'; ui.power.textContent = POWER_NAMES[0];
+  arenaState = 'waiting'; arenaTimer = 0;
+  updateHealthUI(); ui.power.textContent = POWER_NAMES[0];
   ui.progress.style.width = '0%'; ui.hint.style.opacity = '1';
 }
 
 function startGame() {
   reset(); state = 'playing';
-  ui.start.hidden = true; ui.letter.hidden = true;
+  ui.start.hidden = true; ui.letter.hidden = true; ui.death.hidden = true;
   ui.hud.hidden = false; ui.controls.hidden = false; ui.hint.hidden = false;
   ensureAudio(); tone(520, .06, 'sine');
   setTimeout(() => ui.hint.style.opacity = '0', 3200);
@@ -198,7 +218,8 @@ function burst(x, y, color, count = 10) {
 
 function collectHeart(item) {
   item.got = true; heartsFound++;
-  ui.hearts.textContent = heartsFound;
+  hero.maxHp++; hero.hp = Math.min(hero.maxHp, hero.hp + 1);
+  updateHealthUI();
   ui.power.textContent = POWER_NAMES[heartsFound];
   banner = { text: `NOVO PODER: ${POWER_NAMES[heartsFound]}`, time: 2.4 };
   tone(620 + heartsFound * 55, .16, 'sine', .05);
@@ -206,8 +227,15 @@ function collectHeart(item) {
   burst(item.x, item.y, DRESS_COLORS[heartsFound], 22);
 }
 
+function updateHealthUI() {
+  ui.hearts.textContent = hero.hp;
+  ui.heartMax.textContent = `/ ${hero.maxHp}`;
+}
+
 function hurtHero(sourceX) {
-  if (hero.invulnerable > 0) return;
+  if (state !== 'playing' || hero.invulnerable > 0) return;
+  hero.hp--; updateHealthUI();
+  if (hero.hp <= 0) { gameOver(); return; }
   hero.invulnerable = 1.15;
   hero.vx = hero.x < sourceX ? -310 : 310;
   hero.vy = -390; hero.grounded = false;
@@ -221,6 +249,22 @@ function respawnFromHole() {
   camera = Math.max(0, hero.x - 100); screenShake = 12;
   banner = { text: 'O JARDIM TE TROUXE DE VOLTA', time: 1.5 };
   tone(125, .22, 'triangle', .04);
+}
+
+function fallInHole() {
+  if (state !== 'playing') return;
+  hero.hp--; updateHealthUI();
+  if (hero.hp <= 0) { gameOver(); return; }
+  respawnFromHole();
+}
+
+function gameOver() {
+  if (state === 'gameover') return;
+  state = 'gameover'; keys.left = keys.right = false; hero.vx = 0;
+  projectiles = []; enemyShots = [];
+  ui.controls.hidden = true; ui.hint.hidden = true; ui.death.hidden = false;
+  tone(190, .35, 'triangle', .045);
+  setTimeout(() => tone(145, .45, 'sine', .035), 180);
 }
 
 function updateHero(dt) {
@@ -255,29 +299,69 @@ function updateHero(dt) {
   for (const puddle of puddles) {
     if (hero.grounded && hero.y + hero.h >= GROUND_Y - 2 && hero.x + hero.w > puddle.x && hero.x < puddle.x + puddle.w) hero.vx *= .86;
   }
-  if (hero.y > canvas.height + 80) respawnFromHole();
+  if (hero.y > canvas.height + 80) { fallInHole(); return; }
 
-  for (let i = CHECKPOINTS.length - 1; i >= 0; i--) {
-    if (hero.x >= CHECKPOINTS[i]) { hero.checkpoint = CHECKPOINTS[i]; break; }
+  if (arenaState === 'waiting' || arenaState === 'cleared') {
+    for (let i = CHECKPOINTS.length - 1; i >= 0; i--) {
+      if (hero.x >= CHECKPOINTS[i]) { hero.checkpoint = CHECKPOINTS[i]; break; }
+    }
   }
   for (const item of heartItems) {
     if (!item.got && Math.hypot(hero.x + hero.w / 2 - item.x, hero.y + 30 - item.y) < 43) collectHeart(item);
   }
 
   const boss = enemies.find(e => e.type === 'guardian');
-  if (boss?.alive && hero.x > 4430) { hero.x = 4430; hero.vx = Math.min(0, hero.vx); }
+  if (arenaState === 'waiting' && hero.x > PORTAL_X) {
+    arenaState = 'intro'; arenaTimer = 1.65;
+    hero.x = ARENA_LEFT + 70; hero.y = GROUND_Y - hero.h;
+    hero.vx = 0; hero.vy = 0; hero.grounded = true; hero.checkpoint = ARENA_LEFT + 70;
+    camera = ARENA_LEFT - 35;
+    projectiles = []; enemyShots = [];
+    banner = { text: 'VOCÊ FOI LEVADA À ARENA DOS ESPINHOS', time: 1.55 };
+    screenShake = 6; tone(92, .35, 'sawtooth', .04);
+  }
+  if (arenaState === 'intro' || arenaState === 'active' || arenaState === 'victory') {
+    if (hero.x < ARENA_LEFT + 28) { hero.x = ARENA_LEFT + 28; hero.vx = Math.max(0, hero.vx); }
+    if (boss?.alive && hero.x > ARENA_RIGHT - 58) { hero.x = ARENA_RIGHT - 58; hero.vx = Math.min(0, hero.vx); }
+  }
   hero.anim += dt * (Math.abs(hero.vx) > 25 ? 10 : 2);
+}
+
+function updateArena(dt) {
+  if (arenaState !== 'intro' && arenaState !== 'victory') return;
+  arenaTimer -= dt;
+  if (arenaState === 'intro' && arenaTimer <= 0) {
+    arenaState = 'active';
+    banner = { text: 'CHEFE FINAL: CORAÇÃO DE ESPINHOS', time: 2.6 };
+    screenShake = 12; tone(72, .5, 'sawtooth', .05);
+    const boss = enemies.find(e => e.type === 'guardian');
+    if (boss) boss.shoot = 1.25;
+    burst(5650, GROUND_Y - 55, '#d84d70', 32);
+  } else if (arenaState === 'victory' && arenaTimer <= 0) {
+    arenaState = 'cleared';
+    hero.x = 4490; hero.y = GROUND_Y - hero.h;
+    hero.vx = 0; hero.vy = 0; hero.grounded = true; hero.checkpoint = 3890;
+    camera = 4340;
+    banner = { text: 'O PORTAL DA CARTA SE ABRIU!', time: 2.4 };
+    tone(660, .22, 'sine', .04);
+  }
 }
 
 function updateEnemies(dt, time) {
   for (const enemy of enemies) {
     if (!enemy.alive) continue;
+    if (enemy.type === 'guardian' && arenaState !== 'active') continue;
     enemy.hurt = Math.max(0, enemy.hurt - dt);
     if (enemy.type === 'bat') {
       enemy.x += enemy.vx * dt;
       if (Math.abs(enemy.x - enemy.baseX) > enemy.range) enemy.vx *= -1;
       enemy.y = enemy.baseY + Math.sin(time * .003 + enemy.id) * 30;
     } else if (enemy.type === 'thorn' || enemy.type === 'guardian') {
+      if (enemy.type === 'guardian' && enemy.hp <= enemy.maxHp / 2 && !enemy.phaseTwo) {
+        enemy.phaseTwo = true; enemy.vx *= 1.45; enemy.shoot = .2;
+        banner = { text: 'SEGUNDA FASE: TEMPESTADE DE ESPINHOS!', time: 2.2 };
+        screenShake = 10; burst(enemy.x + enemy.w / 2, enemy.y + 40, '#ec5578', 22);
+      }
       enemy.x += enemy.vx * dt;
       if (Math.abs(enemy.x - enemy.baseX) > enemy.range) enemy.vx *= -1;
     }
@@ -285,9 +369,21 @@ function updateEnemies(dt, time) {
       enemy.shoot -= dt;
       if (enemy.shoot <= 0 && Math.abs(enemy.x - hero.x) < (enemy.type === 'guardian' ? 460 : 330)) {
         const dx = hero.x - enemy.x, dy = hero.y + 30 - enemy.y;
-        const len = Math.hypot(dx, dy) || 1;
-        enemyShots.push({ x: enemy.x + enemy.w / 2, y: enemy.y + 12, vx: dx / len * 175, vy: dy / len * 175, life: 3, big: enemy.type === 'guardian' });
-        enemy.shoot = enemy.type === 'guardian' ? .85 : 1.8 + Math.random() * .8;
+        const aim = Math.atan2(dy, dx);
+        if (enemy.type === 'guardian') {
+          const spreads = enemy.phaseTwo ? [-.46, -.23, 0, .23, .46] : [-.25, 0, .25];
+          const speed = enemy.phaseTwo ? 235 : 195;
+          spreads.forEach(spread => enemyShots.push({
+            x: enemy.x + enemy.w / 2, y: enemy.y + 35,
+            vx: Math.cos(aim + spread) * speed, vy: Math.sin(aim + spread) * speed,
+            life: 3.2, big: true
+          }));
+          enemy.shoot = enemy.phaseTwo ? .64 : 1.05;
+        } else {
+          const len = Math.hypot(dx, dy) || 1;
+          enemyShots.push({ x: enemy.x + enemy.w / 2, y: enemy.y + 12, vx: dx / len * 175, vy: dy / len * 175, life: 3, big: false });
+          enemy.shoot = 1.8 + Math.random() * .8;
+        }
       }
     }
     if (overlap(hero, enemy, 7)) hurtHero(enemy.x + enemy.w / 2);
@@ -297,6 +393,7 @@ function updateEnemies(dt, time) {
     rose.x += rose.vx * dt; rose.y += rose.vy * dt; rose.life -= dt; rose.spin += dt * 9;
     for (const enemy of enemies) {
       if (!enemy.alive || rose.life <= 0) continue;
+      if (enemy.type === 'guardian' && arenaState !== 'active') continue;
       if (rose.x > enemy.x && rose.x < enemy.x + enemy.w && rose.y > enemy.y && rose.y < enemy.y + enemy.h) {
         enemy.hp -= rose.damage; enemy.hurt = .14; screenShake = Math.min(6, rose.damage * 2);
         burst(rose.x, rose.y, rose.color, 5); tone(180 + rose.damage * 45, .05, 'square', .02);
@@ -304,7 +401,11 @@ function updateEnemies(dt, time) {
         if (enemy.hp <= 0) {
           enemy.alive = false; burst(enemy.x + enemy.w / 2, enemy.y + enemy.h / 2, enemy.type === 'guardian' ? '#ffd477' : '#e76e83', enemy.type === 'guardian' ? 36 : 16);
           tone(enemy.type === 'guardian' ? 95 : 150, enemy.type === 'guardian' ? .35 : .14, 'sawtooth', .04);
-          if (enemy.type === 'guardian') banner = { text: 'O PORTÃO DAS ROSAS SE ABRIU!', time: 2.4 };
+          if (enemy.type === 'guardian') {
+            arenaState = 'victory'; arenaTimer = 1.5;
+            enemyShots = enemyShots.filter(shot => !shot.big);
+            banner = { text: 'CHEFE DERROTADO!', time: 1.4 };
+          }
         }
       }
     }
@@ -319,15 +420,19 @@ function updateEnemies(dt, time) {
 
 function update(dt, time) {
   if (state !== 'playing') return;
-  updateHero(dt); updateEnemies(dt, time);
+  updateHero(dt);
+  if (state !== 'playing') return;
+  updateArena(dt); updateEnemies(dt, time);
   const targetCamera = hero.x - canvas.width * .38;
   camera += (Math.max(0, Math.min(WORLD_WIDTH - canvas.width, targetCamera)) - camera) * Math.min(1, dt * 5);
-  ui.progress.style.width = `${Math.min(100, hero.x / FINISH_X * 100)}%`;
+  const progress = arenaState === 'intro' || arenaState === 'active' || arenaState === 'victory'
+    ? 92 : Math.min(100, hero.x / FINISH_X * 100);
+  ui.progress.style.width = `${progress}%`;
   particles.forEach(p => { p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 190 * dt; p.life -= dt; });
   particles = particles.filter(p => p.life > 0);
   banner.time = Math.max(0, banner.time - dt); screenShake = Math.max(0, screenShake - dt * 28);
   const boss = enemies.find(e => e.type === 'guardian');
-  if (hero.x > FINISH_X && !boss?.alive) finishGame();
+  if (arenaState === 'cleared' && hero.x > FINISH_X && !boss?.alive) finishGame();
 }
 
 function finishGame() {
@@ -415,16 +520,84 @@ function drawWorld(time) {
   for (const p of puddles) {
     const x = p.x - camera; drawPixelRect(x, GROUND_Y + 2, p.w, 7, '#675575'); drawPixelRect(x + 10, GROUND_Y + 1, p.w - 25, 2, '#a78499');
   }
+  drawArena(time);
   heartItems.forEach((h, i) => {
     if (h.got) return; const bob = Math.sin(time * .004 + i) * 5;
     drawHeart(h.x - camera, h.y + bob, 1.1, '#ff7080');
     ctx.globalAlpha = .2 + Math.sin(time * .005 + i) * .1; drawHeart(h.x - camera, h.y + bob, 2.1, '#ffd7b0'); ctx.globalAlpha = 1;
   });
-  enemies.forEach(e => { if (e.alive) drawEnemy(e, time); });
+  enemies.forEach(e => {
+    if (e.alive && (e.type !== 'guardian' || arenaState === 'active')) drawEnemy(e, time);
+  });
   projectiles.forEach(drawRoseProjectile);
   enemyShots.forEach(drawEnemyShot);
   particles.forEach(drawParticle);
   drawFriend(time); drawHero(); drawBanner();
+}
+
+function drawArena(time) {
+  if (arenaState === 'waiting') drawPortal(PORTAL_X - camera, GROUND_Y - 62, time, false);
+  const left = ARENA_LEFT - camera, right = ARENA_RIGHT - camera;
+  if (right < -80 || left > canvas.width + 80) return;
+
+  drawPixelRect(left, GROUND_Y - 5, ARENA_RIGHT - ARENA_LEFT, 5, '#d17978');
+  for (let x = left + 45; x < right - 30; x += 74) {
+    drawPixelRect(x, GROUND_Y - 13, 28, 4, '#6c4664');
+  }
+
+  drawPixelRect(left, GROUND_Y - 156, 22, 156, '#3b2a43');
+  drawPixelRect(left - 8, GROUND_Y - 166, 38, 14, '#76516a');
+  drawPixelRect(right - 22, GROUND_Y - 156, 22, 156, '#3b2a43');
+  drawPixelRect(right - 30, GROUND_Y - 166, 38, 14, '#76516a');
+  for (let y = GROUND_Y - 143; y < GROUND_Y; y += 26) {
+    drawPixelRect(left + 5, y, 12, 6, '#b16a72');
+    drawPixelRect(right - 17, y, 12, 6, '#b16a72');
+  }
+
+  const leftClosed = arenaState === 'intro' || arenaState === 'active' || arenaState === 'victory';
+  const rightClosed = arenaState !== 'cleared';
+  if (leftClosed) drawArenaGate(left + 22, -1);
+  if (rightClosed) drawArenaGate(right - 22, 1);
+
+  if (arenaState === 'intro') {
+    const bossX = 5650 - camera + 48;
+    const progress = 1 - Math.max(0, arenaTimer) / 1.65;
+    ctx.globalAlpha = .25 + progress * .5;
+    ctx.fillStyle = '#d14970';
+    ctx.beginPath(); ctx.ellipse(bossX, GROUND_Y - 5, 18 + progress * 38, 7 + progress * 8, 0, 0, Math.PI * 2); ctx.fill();
+    for (let i = 0; i < 8; i++) {
+      const a = i * Math.PI / 4 + time * .002;
+      drawPixelRect(bossX + Math.cos(a) * (24 + progress * 25), GROUND_Y - 28 - progress * 70 + Math.sin(a) * 15, 5, 5, '#ec6d85');
+    }
+    ctx.globalAlpha = 1;
+  }
+  if (arenaState === 'victory') drawPortal(5650 - camera + 48, GROUND_Y - 65, time, true);
+}
+
+function drawPortal(x, y, time, golden) {
+  if (x < -80 || x > canvas.width + 80) return;
+  const color = golden ? '#ffd477' : '#b76bd1';
+  ctx.save(); ctx.translate(x, y);
+  ctx.strokeStyle = color; ctx.lineWidth = 6;
+  ctx.beginPath(); ctx.ellipse(0, 0, 25, 52, 0, 0, Math.PI * 2); ctx.stroke();
+  ctx.globalAlpha = .28; ctx.fillStyle = color;
+  ctx.beginPath(); ctx.ellipse(0, 0, 20, 47, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.globalAlpha = 1;
+  for (let i = 0; i < 8; i++) {
+    const a = time * .003 + i * Math.PI / 4;
+    drawPixelRect(Math.cos(a) * 31 - 2, Math.sin(a) * 55 - 2, 5, 5, color);
+  }
+  ctx.restore();
+}
+
+function drawArenaGate(x, direction) {
+  ctx.fillStyle = '#251b32';
+  for (let i = 0; i < 5; i++) {
+    const gx = x + direction * i * 9;
+    ctx.fillRect(Math.round(gx), GROUND_Y - 140, 5, 140);
+    ctx.beginPath(); ctx.moveTo(gx - 3, GROUND_Y - 140); ctx.lineTo(gx + 2, GROUND_Y - 153); ctx.lineTo(gx + 7, GROUND_Y - 140); ctx.fill();
+  }
+  drawPixelRect(direction > 0 ? x - 40 : x, GROUND_Y - 92, 40, 7, '#76516a');
 }
 
 function drawHeart(x, y, scale, color) {
@@ -453,11 +626,23 @@ function drawEnemy(enemy, time) {
     ctx.fillStyle = '#8a526d'; ctx.beginPath(); ctx.arc(x + 20, y + 19, 20, Math.PI, 0); ctx.fill();
     drawPixelRect(x + 7, y + 13, 6, 5, '#e9a37f'); drawPixelRect(x + 24, y + 7, 6, 5, '#e9a37f');
   } else {
-    ctx.fillStyle = '#512d55'; ctx.beginPath(); ctx.arc(x + 36, y + 34, 34, 0, Math.PI * 2); ctx.fill();
-    for (let i = 0; i < 8; i++) { const a = i * Math.PI / 4; ctx.fillStyle = '#a14d6d'; ctx.beginPath(); ctx.arc(x + 36 + Math.cos(a) * 37, y + 34 + Math.sin(a) * 37, 12, 0, Math.PI * 2); ctx.fill(); }
-    drawPixelRect(x + 21, y + 28, 8, 8, '#ffd36e'); drawPixelRect(x + 44, y + 28, 8, 8, '#ffd36e');
-    drawPixelRect(x + 29, y + 48, 16, 6, '#2a1b32');
-    drawPixelRect(x, y - 14, 72, 6, '#291e35'); drawPixelRect(x, y - 14, 72 * (enemy.hp / enemy.maxHp), 6, '#ec6680');
+    const pulse = Math.sin(time * .008) * 2;
+    ctx.strokeStyle = '#76506f'; ctx.lineWidth = 8;
+    ctx.beginPath(); ctx.moveTo(x + 31, y + 58); ctx.lineTo(x + 4, y + 84 + pulse); ctx.moveTo(x + 65, y + 58); ctx.lineTo(x + 92, y + 84 - pulse); ctx.stroke();
+    ctx.fillStyle = enemy.phaseTwo ? '#6e294f' : '#4d3158';
+    ctx.beginPath(); ctx.arc(x + 48, y + 52, 37 + pulse, 0, Math.PI * 2); ctx.fill();
+    for (let i = 0; i < 10; i++) {
+      const a = i * Math.PI / 5 + time * .0005;
+      ctx.fillStyle = i % 2 ? '#a83d63' : '#c4516d';
+      ctx.beginPath(); ctx.ellipse(x + 48 + Math.cos(a) * 39, y + 39 + Math.sin(a) * 30, 15, 9, a, 0, Math.PI * 2); ctx.fill();
+    }
+    drawPixelRect(x + 29, y + 36, 8, 8, '#ffd36e'); drawPixelRect(x + 59, y + 36, 8, 8, '#ffd36e');
+    drawHeart(x + 48, y + 63 + pulse, .62, enemy.phaseTwo ? '#fff0a0' : '#ef7185');
+    drawPixelRect(x + 10, y + 91, 28, 10, '#3b2945'); drawPixelRect(x + 58, y + 91, 28, 10, '#3b2945');
+    drawPixelRect(x - 18, y - 28, 132, 7, '#291e35');
+    drawPixelRect(x - 18, y - 28, 132 * (enemy.hp / enemy.maxHp), 7, enemy.phaseTwo ? '#ffd36e' : '#ec6680');
+    ctx.fillStyle = '#fff0cf'; ctx.font = '8px Pixelify Sans'; ctx.textAlign = 'center';
+    ctx.fillText(enemy.phaseTwo ? 'CORAÇÃO DE ESPINHOS · FASE 2' : 'CORAÇÃO DE ESPINHOS', x + 48, y - 35);
   }
   ctx.restore();
 }
@@ -485,6 +670,23 @@ function drawParticle(p) {
 }
 
 function drawHero() {
+  const running = hero.attackTimer <= 0 && hero.grounded && Math.abs(hero.vx) > 25;
+  if (running && heroImage.complete && heroImage.naturalWidth) {
+    const frame = RUN_SEQUENCE[Math.floor(hero.anim) % RUN_SEQUENCE.length];
+    const column = frame % 4, row = Math.floor(frame / 4);
+    const sx = Math.round(column * heroImage.width / 4);
+    const sy = Math.round(row * heroImage.height / 2);
+    const sxEnd = Math.round((column + 1) * heroImage.width / 4);
+    const syEnd = Math.round((row + 1) * heroImage.height / 2);
+    const anchor = RUN_ANCHORS[frame];
+    ctx.save();
+    const cx = hero.x - camera + hero.w / 2;
+    if (hero.invulnerable > 0 && Math.floor(hero.invulnerable * 14) % 2) ctx.globalAlpha = .35;
+    ctx.translate(cx, 0); ctx.scale(hero.facing, 1);
+    ctx.drawImage(heroImage, sx, sy, sxEnd - sx, syEnd - sy, -57 + anchor.x, Math.round(hero.y - 16 + anchor.y), 114, 114);
+    ctx.restore();
+    return;
+  }
   const atlas = outfitAtlasA;
   if (!atlas.complete || !atlas.naturalWidth) return;
   const rows = 4;
@@ -492,7 +694,6 @@ function drawHero() {
   let column = 0;
   if (hero.attackTimer > 0) column = 3;
   else if (!hero.grounded) column = 2;
-  else if (Math.abs(hero.vx) > 25) column = 1;
   // The generated atlases are not exactly divisible by their grid size.
   // Rounded cell edges prevent fractional sampling from leaking a neighbour frame.
   const sx = Math.round(column * atlas.width / 4);
@@ -516,13 +717,15 @@ function drawHero() {
 
 function drawFriend(time) {
   if (!friendImage.complete) return;
+  if (arenaState !== 'cleared' && state !== 'finished') return;
   const x = FRIEND_X - camera; if (x < -130 || x > canvas.width + 130) return;
   const frame = state === 'finished' ? 2 : Math.floor(time / 900) % 2;
   const sw = friendImage.width / 2, sh = friendImage.height / 2;
   ctx.drawImage(friendImage, (frame % 2) * sw, Math.floor(frame / 2) * sh, sw, sh, x - 72, GROUND_Y - 143, 145, 145);
   if (state === 'playing' && hero.x > 4460) {
-    ctx.fillStyle = 'rgba(39,29,53,.82)'; ctx.fillRect(x - 72, GROUND_Y - 175, 144, 25);
-    ctx.fillStyle = '#fff0d5'; ctx.font = '9px DM Mono'; ctx.textAlign = 'center'; ctx.fillText('VOCÊ CONSEGUIU!', x, GROUND_Y - 158);
+    ctx.fillStyle = 'rgba(39,29,53,.82)'; ctx.fillRect(x - 72, GROUND_Y - 186, 144, 36);
+    ctx.fillStyle = '#f3c66a'; ctx.font = '8px DM Mono'; ctx.textAlign = 'center'; ctx.fillText('PAULO: BRUNA!', x, GROUND_Y - 171);
+    ctx.fillStyle = '#fff0d5'; ctx.fillText('VOCÊ CONSEGUIU!', x, GROUND_Y - 158);
   }
 }
 
@@ -568,5 +771,6 @@ addEventListener('keyup', e => {
 });
 ui.startButton.addEventListener('click', startGame);
 ui.replay.addEventListener('click', startGame);
+ui.restart.addEventListener('click', startGame);
 ui.sound.addEventListener('click', () => { soundOn = !soundOn; ui.sound.textContent = soundOn ? '♪' : '×'; });
 requestAnimationFrame(loop);

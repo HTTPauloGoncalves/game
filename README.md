@@ -27,4 +27,4 @@ A personagem começa com 1 ponto de vida. Cada coração coletado aumenta a vida
 
 ## Personalizar a carta
 
-Edite o conteúdo do elemento `#letterText` em `index.html`. O texto atual é um placeholder até a mensagem final ser definida.
+Edite o conteúdo do elemento `#letterText` em `index.html`. A carta atual é a mensagem de Paulo para Bruna e conecta os sonhos do casal aos corações, rosas e desafios do jogo.

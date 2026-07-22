@@ -1,0 +1,210 @@
+:root {
+  color-scheme: dark;
+  --ink: #2b2039;
+  --cream: #fff4dc;
+  --coral: #ef755b;
+  --rose: #b94d66;
+  --gold: #f3c66a;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  overscroll-behavior: none;
+  background: #171326;
+  font-family: "DM Mono", monospace;
+  touch-action: none;
+}
+
+body { display: grid; place-items: center; }
+
+.game-shell {
+  position: relative;
+  width: min(100vw, 460px);
+  height: min(100dvh, 996px);
+  overflow: hidden;
+  background: #735b8b;
+  box-shadow: 0 0 80px #05030a;
+  isolation: isolate;
+}
+
+#game {
+  display: block;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+}
+
+.start-screen,
+.letter-screen {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  text-align: center;
+}
+
+.start-screen {
+  padding: 0 34px max(52px, calc(env(safe-area-inset-bottom) + 28px));
+  color: var(--cream);
+  background: linear-gradient(180deg, transparent 29%, rgba(31, 22, 48, .15) 42%, #20192f 81%);
+}
+
+.eyebrow, .letter-heading {
+  color: var(--gold);
+  font-size: 10px;
+  letter-spacing: .3em;
+  font-weight: 500;
+}
+
+h1 {
+  margin: 10px 0 13px;
+  color: #fff7e7;
+  font-family: "Pixelify Sans", sans-serif;
+  font-size: clamp(42px, 12vw, 54px);
+  line-height: .82;
+  letter-spacing: -.04em;
+  text-shadow: 3px 4px 0 #7a3d5d;
+}
+
+h1 em { color: #ffad7e; font-style: normal; }
+.start-screen p { max-width: 330px; margin: 0 0 26px; color: #d7cbdc; font-size: 12px; line-height: 1.65; }
+
+.primary-button {
+  width: min(100%, 290px);
+  min-height: 56px;
+  border: 0;
+  border-bottom: 5px solid #9d3e52;
+  border-radius: 5px;
+  background: var(--coral);
+  color: white;
+  font: 600 14px "Pixelify Sans", sans-serif;
+  letter-spacing: .16em;
+  cursor: pointer;
+  box-shadow: 0 9px 22px rgba(0,0,0,.28);
+}
+
+.primary-button:active { transform: translateY(3px); border-bottom-width: 2px; }
+.start-screen small { margin-top: 14px; color: #83778e; font-size: 8px; letter-spacing: .08em; }
+
+.hud {
+  position: absolute;
+  top: max(15px, env(safe-area-inset-top));
+  left: 18px;
+  right: 18px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  filter: drop-shadow(0 2px 0 rgba(32,25,47,.35));
+  flex-wrap: wrap;
+}
+
+.heart-count { display: flex; align-items: baseline; color: white; font: 600 18px "Pixelify Sans"; }
+.heart-count span { color: #ff6c78; margin-right: 5px; }
+.heart-count small { color: #d4c3d7; font-size: 10px; }
+.journey { flex: 1; height: 7px; padding: 2px; border-radius: 8px; background: rgba(35,25,48,.55); }
+.journey span { display: block; width: 0; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #ff8b6a, #ffd17d); transition: width .2s; }
+.sound { width: 34px; height: 34px; border: 1px solid rgba(255,255,255,.18); border-radius: 50%; color: #fff2d1; background: rgba(35,25,48,.45); font: 18px serif; }
+.power-badge {
+  width: 100%;
+  margin-top: -8px;
+  color: #ffe2a0;
+  font: 7px "DM Mono";
+  letter-spacing: .13em;
+  text-align: center;
+  text-shadow: 1px 1px #3d2947;
+}
+
+.hint {
+  position: absolute;
+  top: max(62px, calc(env(safe-area-inset-top) + 48px));
+  left: 50%;
+  translate: -50% 0;
+  padding: 7px 11px;
+  border-radius: 3px;
+  color: #fff0d1;
+  background: rgba(42,31,56,.62);
+  font-size: 8px;
+  letter-spacing: .11em;
+  white-space: nowrap;
+  transition: opacity .4s;
+}
+
+.controls {
+  position: absolute;
+  left: 22px;
+  right: 22px;
+  bottom: max(22px, env(safe-area-inset-bottom));
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+}
+
+.move-controls { display: flex; gap: 10px; }
+.action-controls { display: flex; gap: 9px; align-items: flex-end; }
+.controls button {
+  width: 62px;
+  height: 62px;
+  border: 2px solid rgba(255,255,255,.17);
+  border-radius: 50%;
+  color: #fff4dd;
+  background: rgba(39,29,53,.46);
+  backdrop-filter: blur(3px);
+  font: 32px "DM Mono";
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.controls button.active, .controls button:active { background: rgba(239,117,91,.62); transform: scale(.94); }
+.controls .jump-button { width: 72px; height: 72px; display: grid; place-content: center; color: white; background: rgba(185,77,102,.58); }
+.controls .shoot-button { width: 66px; height: 66px; display: grid; place-content: center; color: #ffe6ec; background: rgba(117,63,118,.67); }
+.shoot-button span { color: #ff91a8; font-size: 24px; line-height: .65; }
+.jump-button span { line-height: .65; }
+.jump-button small, .shoot-button small { margin-top: 8px; font: 7px "DM Mono"; letter-spacing: .13em; }
+
+@media (max-width: 370px) {
+  .controls { left: 12px; right: 12px; }
+  .controls button { width: 54px; height: 54px; }
+  .controls .shoot-button { width: 58px; height: 58px; }
+  .controls .jump-button { width: 64px; height: 64px; }
+}
+
+.letter-screen { justify-content: center; padding: 30px; }
+.letter-backdrop { position: absolute; inset: 0; background: rgba(27,19,39,.78); backdrop-filter: blur(8px); }
+.letter-card {
+  position: relative;
+  width: min(100%, 350px);
+  min-height: 485px;
+  padding: 54px 30px 28px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: #fff2d6;
+  color: #4c3544;
+  border: 5px solid #e7c98e;
+  border-radius: 4px;
+  box-shadow: 0 20px 60px rgba(0,0,0,.5), inset 0 0 40px rgba(168,112,76,.08);
+  animation: letter-open .65s cubic-bezier(.2,.9,.2,1) both;
+}
+
+.letter-card::before, .letter-card::after { content: "✦"; position: absolute; color: #c99a62; top: 22px; }
+.letter-card::before { left: 24px; } .letter-card::after { right: 24px; }
+.wax-seal { position: absolute; top: -31px; display: grid; place-items: center; width: 62px; height: 62px; border-radius: 50%; color: #ffd2b0; background: #b94d59; border: 5px double #8d3548; box-shadow: 0 5px 10px rgba(69,34,43,.3); font-size: 23px; }
+.letter-heading { color: #a75a55; }
+.letter-body { flex: 1; width: 100%; margin: 30px 0 22px; display: grid; place-content: center; border-top: 1px solid #d8bca0; border-bottom: 1px solid #d8bca0; }
+.letter-body p { font-family: Georgia, serif; font-size: 18px; line-height: 1.55; }
+.letter-body .placeholder-note { font: 9px/1.6 "DM Mono"; color: #a08078; }
+.letter-card .primary-button { min-height: 48px; width: 220px; font-size: 11px; }
+
+[hidden] { display: none !important; }
+@keyframes letter-open { from { opacity: 0; transform: translateY(50px) scale(.88) rotate(2deg); } }
+
+@media (min-width: 700px) and (min-height: 750px) {
+  .game-shell { border: 8px solid #2d243d; border-radius: 28px; }
+}

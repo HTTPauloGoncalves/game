@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+  <meta name="theme-color" content="#241c38" />
+  <title>Um Caminho Até Você</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Pixelify+Sans:wght@500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <main class="game-shell" aria-label="Jogo Um Caminho Até Você">
+    <canvas id="game" width="390" height="844" aria-label="Fase do jogo"></canvas>
+
+    <section class="start-screen" id="startScreen">
+      <div class="eyebrow">UMA PEQUENA JORNADA</div>
+      <h1>Um caminho<br /><em>até você</em></h1>
+      <p>Ajude Lina a atravessar o jardim, enfrentar os espinhos e evoluir o poder das rosas.</p>
+      <button class="primary-button" id="startButton">COMEÇAR <span>→</span></button>
+      <small>Use os botões ou as setas do teclado</small>
+    </section>
+
+    <header class="hud" id="hud" hidden>
+      <div class="heart-count"><span>♥</span> <b id="heartCount">0</b><small>/ 8</small></div>
+      <div class="journey"><span id="progressFill"></span></div>
+      <button class="sound" id="soundButton" aria-label="Ativar ou desativar som">♪</button>
+      <div class="power-badge" id="powerBadge">ROSA SINGELA</div>
+    </header>
+
+    <div class="hint" id="hint" hidden>PULE • DISPARE ROSAS • EVOLUA</div>
+
+    <nav class="controls" id="controls" hidden aria-label="Controles do jogo">
+      <div class="move-controls">
+        <button data-control="left" aria-label="Andar para a esquerda">‹</button>
+        <button data-control="right" aria-label="Andar para a direita">›</button>
+      </div>
+      <div class="action-controls">
+        <button class="shoot-button" data-control="shoot" aria-label="Disparar rosas"><span>✿</span><small>ROSA</small></button>
+        <button class="jump-button" data-control="jump" aria-label="Pular"><span>↑</span><small>PULAR</small></button>
+      </div>
+    </nav>
+
+    <section class="letter-screen" id="letterScreen" hidden>
+      <div class="letter-backdrop"></div>
+      <div class="letter-card">
+        <div class="wax-seal">♥</div>
+        <div class="letter-heading">PARA VOCÊ</div>
+        <div class="letter-body">
+          <p id="letterText">O texto especial da sua carta vai aparecer aqui.</p>
+          <p class="placeholder-note">— Envie a mensagem quando quiser e eu coloco neste espaço ♥</p>
+        </div>
+        <button class="primary-button" id="replayButton">JOGAR DE NOVO</button>
+      </div>
+    </section>
+  </main>
+  <script src="game.js"></script>
+</body>
+</html>

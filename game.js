@@ -15,6 +15,7 @@ const ui = {
   letter: document.querySelector('#letterScreen'),
   replay: document.querySelector('#replayButton'),
   death: document.querySelector('#deathScreen'),
+  arenaRetry: document.querySelector('#arenaRetryButton'),
   restart: document.querySelector('#restartButton'),
   sound: document.querySelector('#soundButton')
 };
@@ -25,6 +26,8 @@ const outfitAtlasA = new Image();
 outfitAtlasA.src = 'assets/hero-outfits-a.png';
 const friendImage = new Image();
 friendImage.src = 'assets/letter-giver.png';
+const enemyImage = new Image();
+enemyImage.src = 'assets/enemies.png';
 
 const WORLD_WIDTH = 6100;
 const GROUND_Y = 678;
@@ -42,6 +45,21 @@ const DRESS_COLORS = ['#ef704f', '#d94b5e', '#e85d9a', '#9a66d6', '#567fe0', '#3
 const POWER_NAMES = [
   'ROSA SINGELA', 'BOTÃO RUBI', 'DUAS PÉTALAS', 'ESPINHO FORTE',
   'JARDIM VELOZ', 'LEQUE DE ROSAS', 'FLOR CELESTE', 'ROSA PERFURANTE', 'CORAÇÃO EM FLOR'
+];
+const POWER_DESCRIPTIONS = [
+  '1 DISPARO', 'ROSA MAIS VELOZ', '2 DISPAROS', 'DANO AUMENTADO',
+  'DISPARO MAIS RÁPIDO', 'LEQUE DE 3 ROSAS', 'ROSAS MAIS FORTES',
+  'ATRAVESSA INIMIGOS', 'LEQUE DE 5 ROSAS'
+];
+const ROMANTIC_MESSAGES = [
+  'CADA CORAÇÃO DEIXA BRUNA MAIS PERTO DE PAULO',
+  'O AMOR TAMBÉM NOS DÁ FORÇA PARA CONTINUAR',
+  'ALGUNS CAMINHOS VALEM TODOS OS OBSTÁCULOS',
+  'CADA ROSA GUARDA UM PEDAÇO DESTA HISTÓRIA',
+  'JUNTOS, ATÉ OS DIAS DIFÍCEIS FICAM MAIS LEVES',
+  'O MELHOR DESTINO É AQUELE QUE LEVA ATÉ VOCÊ',
+  'NENHUM ESPINHO É MAIOR QUE O NOSSO AMOR',
+  'O CORAÇÃO DE BRUNA JÁ SABE ONDE QUER CHEGAR'
 ];
 const POSE_ANCHORS = [
   { x: 0, y: 0 },
@@ -116,9 +134,12 @@ let projectiles = [];
 let enemyShots = [];
 let enemies = [];
 let banner = { text: '', time: 0 };
+let bannerQueue = [];
 let screenShake = 0;
 let arenaState = 'waiting';
 let arenaTimer = 0;
+let musicTimer = null;
+let musicStep = 0;
 
 function createEnemies() {
   return ENEMY_DEFS.map((d, index) => {
@@ -141,17 +162,17 @@ function reset() {
   });
   heartItems.forEach(h => h.got = false);
   heartsFound = 0; camera = 0; particles = []; projectiles = []; enemyShots = [];
-  enemies = createEnemies(); banner.time = 0; screenShake = 0;
+  enemies = createEnemies(); banner.time = 0; bannerQueue = []; screenShake = 0;
   arenaState = 'waiting'; arenaTimer = 0;
-  updateHealthUI(); ui.power.textContent = POWER_NAMES[0];
+  updateHealthUI(); updatePowerUI();
   ui.progress.style.width = '0%'; ui.hint.style.opacity = '1';
 }
 
 function startGame() {
   reset(); state = 'playing';
-  ui.start.hidden = true; ui.letter.hidden = true; ui.death.hidden = true;
+  ui.start.hidden = true; ui.letter.hidden = true; ui.death.hidden = true; ui.arenaRetry.hidden = true;
   ui.hud.hidden = false; ui.controls.hidden = false; ui.hint.hidden = false;
-  ensureAudio(); tone(520, .06, 'sine');
+  ensureAudio(); startMusic(); sfx('start');
   setTimeout(() => ui.hint.style.opacity = '0', 3200);
 }
 
@@ -160,17 +181,45 @@ function ensureAudio() {
   if (audio.state === 'suspended') audio.resume();
 }
 
-function tone(freq, duration, type = 'square', volume = .035) {
+function tone(freq, duration, type = 'square', volume = .035, delay = 0) {
   if (!soundOn || !audio) return;
   const osc = audio.createOscillator(); const gain = audio.createGain();
-  osc.type = type; osc.frequency.value = freq; gain.gain.value = volume;
-  gain.gain.exponentialRampToValueAtTime(.0001, audio.currentTime + duration);
-  osc.connect(gain).connect(audio.destination); osc.start(); osc.stop(audio.currentTime + duration);
+  const startAt = audio.currentTime + delay;
+  osc.type = type; osc.frequency.value = freq; gain.gain.setValueAtTime(volume, startAt);
+  gain.gain.exponentialRampToValueAtTime(.0001, startAt + duration);
+  osc.connect(gain).connect(audio.destination); osc.start(startAt); osc.stop(startAt + duration);
+}
+
+function sfx(name) {
+  const sounds = {
+    start: [[523, .08, 'sine', .035, 0], [659, .12, 'sine', .03, .08]],
+    jump: [[330, .07, 'square', .025, 0], [440, .08, 'square', .018, .045]],
+    rose: [[520, .045, 'triangle', .018, 0], [740, .06, 'sine', .014, .025]],
+    heart: [[660, .1, 'sine', .04, 0], [830, .12, 'sine', .035, .09], [990, .14, 'triangle', .025, .18]],
+    hurt: [[145, .16, 'sawtooth', .04, 0], [105, .2, 'triangle', .025, .07]],
+    portal: [[110, .28, 'sawtooth', .025, 0], [220, .35, 'sine', .022, .08]],
+    victory: [[523, .14, 'square', .032, 0], [659, .14, 'square', .03, .13], [784, .28, 'triangle', .035, .26]]
+  };
+  (sounds[name] || []).forEach(args => tone(...args));
+}
+
+function startMusic() {
+  if (musicTimer) return;
+  const melody = [523, 659, 784, 659, 587, 698, 880, 698, 494, 587, 740, 587, 523, 659, 784, 988];
+  const bass = [131, 131, 147, 147, 123, 123, 131, 131];
+  const playBeat = () => {
+    if (state === 'playing' && soundOn) {
+      tone(melody[musicStep % melody.length], .18, 'triangle', .009);
+      if (musicStep % 2 === 0) tone(bass[Math.floor(musicStep / 2) % bass.length], .32, 'sine', .008);
+    }
+    musicStep++;
+  };
+  playBeat(); musicTimer = setInterval(playBeat, 285);
 }
 
 function jump() {
   if (state === 'playing' && hero.grounded) {
-    hero.vy = -680; hero.grounded = false; tone(360, .09);
+    hero.vy = -680; hero.grounded = false; sfx('jump');
   }
 }
 
@@ -180,7 +229,7 @@ function shootRose() {
   hero.attackTimer = .34;
   hero.pendingShot = { delay: .13, level };
   hero.shootCooldown = Math.max(.2, .52 - level * .038);
-  tone(315 + level * 20, .05, 'sine', .018);
+  sfx('rose');
 }
 
 function releaseRoseVolley(level) {
@@ -219,17 +268,20 @@ function burst(x, y, color, count = 10) {
 function collectHeart(item) {
   item.got = true; heartsFound++;
   hero.maxHp++; hero.hp = Math.min(hero.maxHp, hero.hp + 1);
-  updateHealthUI();
-  ui.power.textContent = POWER_NAMES[heartsFound];
-  banner = { text: `NOVO PODER: ${POWER_NAMES[heartsFound]}`, time: 2.4 };
-  tone(620 + heartsFound * 55, .16, 'sine', .05);
-  setTimeout(() => tone(820 + heartsFound * 30, .12, 'sine', .04), 100);
+  updateHealthUI(); updatePowerUI();
+  banner = { text: `${POWER_NAMES[heartsFound]} · ${POWER_DESCRIPTIONS[heartsFound]}`, time: 2.5 };
+  bannerQueue.push({ text: ROMANTIC_MESSAGES[heartsFound - 1], time: 2.7 });
+  sfx('heart');
   burst(item.x, item.y, DRESS_COLORS[heartsFound], 22);
 }
 
 function updateHealthUI() {
   ui.hearts.textContent = hero.hp;
   ui.heartMax.textContent = `/ ${hero.maxHp}`;
+}
+
+function updatePowerUI() {
+  ui.power.textContent = `${POWER_NAMES[heartsFound]} · ${POWER_DESCRIPTIONS[heartsFound]}`;
 }
 
 function hurtHero(sourceX) {
@@ -239,7 +291,7 @@ function hurtHero(sourceX) {
   hero.invulnerable = 1.15;
   hero.vx = hero.x < sourceX ? -310 : 310;
   hero.vy = -390; hero.grounded = false;
-  screenShake = 8; tone(115, .18, 'sawtooth', .045);
+  screenShake = 8; sfx('hurt');
   burst(hero.x + hero.w / 2, hero.y + 30, '#d8b6da', 8);
 }
 
@@ -260,11 +312,29 @@ function fallInHole() {
 
 function gameOver() {
   if (state === 'gameover') return;
+  const canRetryArena = arenaState === 'intro' || arenaState === 'active' || arenaState === 'victory';
   state = 'gameover'; keys.left = keys.right = false; hero.vx = 0;
   projectiles = []; enemyShots = [];
-  ui.controls.hidden = true; ui.hint.hidden = true; ui.death.hidden = false;
-  tone(190, .35, 'triangle', .045);
-  setTimeout(() => tone(145, .45, 'sine', .035), 180);
+  ui.controls.hidden = true; ui.hint.hidden = true; ui.death.hidden = false; ui.arenaRetry.hidden = !canRetryArena;
+  sfx('hurt');
+}
+
+function retryArena() {
+  const boss = enemies.find(enemy => enemy.type === 'guardian');
+  if (boss) Object.assign(boss, {
+    x: boss.baseX, y: boss.baseY, vx: -52, hp: boss.maxHp,
+    alive: true, hurt: 0, shoot: 1.25, phaseTwo: false, announced: false
+  });
+  Object.assign(hero, {
+    x: ARENA_LEFT + 70, y: GROUND_Y - hero.h, vx: 0, vy: 0,
+    grounded: true, invulnerable: 1.5, shootCooldown: 0, attackTimer: 0,
+    pendingShot: null, checkpoint: ARENA_LEFT + 70, hp: hero.maxHp
+  });
+  state = 'playing'; arenaState = 'intro'; arenaTimer = 1.65;
+  camera = ARENA_LEFT - 35; projectiles = []; enemyShots = []; particles = []; bannerQueue = [];
+  banner = { text: 'O AMOR NOS DÁ OUTRA CHANCE', time: 2.2 };
+  ui.death.hidden = true; ui.arenaRetry.hidden = true; ui.controls.hidden = false; ui.hud.hidden = false;
+  updateHealthUI(); ensureAudio(); startMusic(); sfx('portal');
 }
 
 function updateHero(dt) {
@@ -318,7 +388,7 @@ function updateHero(dt) {
     camera = ARENA_LEFT - 35;
     projectiles = []; enemyShots = [];
     banner = { text: 'VOCÊ FOI LEVADA À ARENA DOS ESPINHOS', time: 1.55 };
-    screenShake = 6; tone(92, .35, 'sawtooth', .04);
+    screenShake = 6; sfx('portal');
   }
   if (arenaState === 'intro' || arenaState === 'active' || arenaState === 'victory') {
     if (hero.x < ARENA_LEFT + 28) { hero.x = ARENA_LEFT + 28; hero.vx = Math.max(0, hero.vx); }
@@ -343,7 +413,7 @@ function updateArena(dt) {
     hero.vx = 0; hero.vy = 0; hero.grounded = true; hero.checkpoint = 3890;
     camera = 4340;
     banner = { text: 'O PORTAL DA CARTA SE ABRIU!', time: 2.4 };
-    tone(660, .22, 'sine', .04);
+    sfx('portal');
   }
 }
 
@@ -400,7 +470,8 @@ function updateEnemies(dt, time) {
         if (rose.pierce > 0) rose.pierce--; else rose.life = 0;
         if (enemy.hp <= 0) {
           enemy.alive = false; burst(enemy.x + enemy.w / 2, enemy.y + enemy.h / 2, enemy.type === 'guardian' ? '#ffd477' : '#e76e83', enemy.type === 'guardian' ? 36 : 16);
-          tone(enemy.type === 'guardian' ? 95 : 150, enemy.type === 'guardian' ? .35 : .14, 'sawtooth', .04);
+          if (enemy.type === 'guardian') sfx('victory');
+          else tone(150, .14, 'sawtooth', .04);
           if (enemy.type === 'guardian') {
             arenaState = 'victory'; arenaTimer = 1.5;
             enemyShots = enemyShots.filter(shot => !shot.big);
@@ -430,7 +501,9 @@ function update(dt, time) {
   ui.progress.style.width = `${progress}%`;
   particles.forEach(p => { p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 190 * dt; p.life -= dt; });
   particles = particles.filter(p => p.life > 0);
-  banner.time = Math.max(0, banner.time - dt); screenShake = Math.max(0, screenShake - dt * 28);
+  banner.time = Math.max(0, banner.time - dt);
+  if (banner.time === 0 && bannerQueue.length) banner = bannerQueue.shift();
+  screenShake = Math.max(0, screenShake - dt * 28);
   const boss = enemies.find(e => e.type === 'guardian');
   if (arenaState === 'cleared' && hero.x > FINISH_X && !boss?.alive) finishGame();
 }
@@ -438,7 +511,7 @@ function update(dt, time) {
 function finishGame() {
   state = 'finished'; keys.left = keys.right = false; hero.vx = 0;
   ui.controls.hidden = true; ui.hint.hidden = true;
-  tone(523, .18, 'sine', .05); setTimeout(() => tone(659, .22, 'sine', .05), 160);
+  sfx('victory');
   setTimeout(() => { ui.letter.hidden = false; }, 700);
 }
 
@@ -446,16 +519,60 @@ function drawPixelRect(x, y, w, h, color) {
   ctx.fillStyle = color; ctx.fillRect(Math.round(x), Math.round(y), Math.round(w), Math.round(h));
 }
 
-function drawBackground() {
+function mixColor(from, to, amount) {
+  const a = from.match(/\w\w/g).map(value => parseInt(value, 16));
+  const b = to.match(/\w\w/g).map(value => parseInt(value, 16));
+  return `rgb(${a.map((value, index) => Math.round(value + (b[index] - value) * amount)).join(',')})`;
+}
+
+function drawAmbientLife(time) {
+  const wrap = (value, size) => ((value % size) + size) % size;
+  for (let i = 0; i < 15; i++) {
+    const x = wrap(i * 83 + time * (.008 + i % 3 * .003) - camera * .08, canvas.width + 50) - 25;
+    const y = 105 + wrap(i * 67 + time * (.004 + i % 2 * .002), 455);
+    ctx.save(); ctx.translate(x, y); ctx.rotate(time * .0015 + i);
+    ctx.globalAlpha = .38 + i % 3 * .13; ctx.fillStyle = i % 2 ? '#f19a9e' : '#ffd0b5';
+    ctx.beginPath(); ctx.ellipse(0, 0, 4, 2, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+  }
+  ctx.strokeStyle = 'rgba(45,38,64,.55)'; ctx.lineWidth = 2;
+  for (let i = 0; i < 3; i++) {
+    const x = wrap(i * 170 + time * .018 - camera * .035, canvas.width + 90) - 45;
+    const y = 145 + i * 42 + Math.sin(time * .002 + i) * 12;
+    ctx.beginPath(); ctx.moveTo(x - 8, y); ctx.quadraticCurveTo(x - 3, y - 5, x, y);
+    ctx.quadraticCurveTo(x + 4, y - 5, x + 9, y); ctx.stroke();
+  }
+  for (let i = 0; i < 6; i++) {
+    const worldX = 620 + i * 690, x = worldX - camera;
+    if (x < -20 || x > canvas.width + 20) continue;
+    const y = 525 + Math.sin(time * .004 + i * 2) * 24;
+    const flap = 2 + Math.abs(Math.sin(time * .012 + i)) * 4;
+    ctx.fillStyle = i % 2 ? '#ffd477' : '#f590aa';
+    ctx.beginPath(); ctx.ellipse(x - flap, y, flap, 3, -.4, 0, Math.PI * 2); ctx.ellipse(x + flap, y, flap, 3, .4, 0, Math.PI * 2); ctx.fill();
+    drawPixelRect(x - 1, y - 3, 2, 7, '#49344e');
+  }
+}
+
+function drawRoseTrail() {
+  for (let worldX = 3525; worldX < 4680; worldX += 115) {
+    if (!isSolidGround(worldX) || (worldX > PORTAL_X && worldX < 4380)) continue;
+    const x = worldX - camera;
+    if (x < -12 || x > canvas.width + 12) continue;
+    drawPixelRect(x, GROUND_Y - 9, 2, 9, '#56805d');
+    drawPixelRect(x - 4, GROUND_Y - 13, 5, 5, '#d65d79');
+    drawPixelRect(x + 1, GROUND_Y - 16, 5, 5, '#f08b9b');
+    drawPixelRect(x + 3, GROUND_Y - 11, 4, 4, '#bc4968');
+  }
+}
+
+function drawBackground(time) {
+  const dayProgress = Math.max(0, Math.min(1, camera / FINISH_X));
   const sky = ctx.createLinearGradient(0, 0, 0, canvas.height);
   const region = Math.floor((camera + canvas.width / 2) / 1200);
-  const skies = [
-    ['#5b547f', '#bd7183', '#f4a16e'], ['#3d557e', '#8b71a0', '#dc8b88'],
-    ['#314b65', '#56698a', '#b88191'], ['#342f58', '#66507c', '#cd7580']
-  ][Math.min(3, region)];
+  const skies = [mixColor('#675b8d', '#27223f', dayProgress), mixColor('#bf7890', '#655078', dayProgress), mixColor('#f5aa73', '#c96378', dayProgress)];
   sky.addColorStop(0, skies[0]); sky.addColorStop(.5, skies[1]); sky.addColorStop(1, skies[2]);
   ctx.fillStyle = sky; ctx.fillRect(0, 0, canvas.width, canvas.height);
-  ctx.fillStyle = '#ffd998'; ctx.globalAlpha = .82; ctx.beginPath(); ctx.arc(305 - camera * .02, 210, 44, 0, Math.PI * 2); ctx.fill(); ctx.globalAlpha = 1;
+  ctx.fillStyle = '#ffd998'; ctx.globalAlpha = .86 - dayProgress * .45; ctx.beginPath(); ctx.arc(305 - camera * .02, 175 + dayProgress * 95, 44, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#f8e5ba'; ctx.globalAlpha = Math.max(0, dayProgress - .55) * 1.8; ctx.beginPath(); ctx.arc(315, 130, 27, 0, Math.PI * 2); ctx.fill(); ctx.globalAlpha = 1;
 
   ctx.fillStyle = '#66506f';
   for (let i = -1; i < 7; i++) {
@@ -469,6 +586,8 @@ function drawBackground() {
     ctx.beginPath(); ctx.arc(x + 38, 474, 37, 0, Math.PI * 2); ctx.arc(x + 16, 492, 27, 0, Math.PI * 2); ctx.arc(x + 62, 495, 30, 0, Math.PI * 2); ctx.fill();
   }
 
+  drawAmbientLife(time);
+
   drawPixelRect(0, GROUND_Y, canvas.width, canvas.height - GROUND_Y, '#171523');
   for (const [start, end] of GROUND_SEGMENTS) {
     const x = start - camera, w = end - start;
@@ -480,10 +599,14 @@ function drawBackground() {
     const worldX = i * 94 + 22, x = worldX - camera;
     if (x > -10 && x < canvas.width + 10 && isSolidGround(worldX)) {
       drawPixelRect(x, GROUND_Y - 8, 3, 8, '#54734c');
-      drawPixelRect(x - 3, GROUND_Y - 10, 4, 4, i % 2 ? '#f3a068' : '#dc6680');
-      drawPixelRect(x + 2, GROUND_Y - 13, 4, 4, i % 2 ? '#f3a068' : '#dc6680');
+      const bloomed = hero.x > worldX - 45;
+      if (bloomed) {
+        drawPixelRect(x - 4, GROUND_Y - 11, 5, 5, i % 2 ? '#f3a068' : '#dc6680');
+        drawPixelRect(x + 2, GROUND_Y - 14, 5, 5, i % 2 ? '#ffd08a' : '#f58ca1');
+      } else drawPixelRect(x - 1, GROUND_Y - 11, 4, 4, '#876477');
     }
   }
+  drawRoseTrail();
   drawHoles(); drawLandmarks(region);
 }
 
@@ -611,6 +734,35 @@ function drawEnemy(enemy, time) {
   if (x < -100 || x > canvas.width + 100) return;
   ctx.save();
   if (enemy.hurt > 0) ctx.globalAlpha = .5;
+  if (enemyImage.complete && enemyImage.naturalWidth) {
+    const sheetW = enemyImage.width, sheetH = enemyImage.height;
+    const sprite = {
+      thorn: { sx: .11, sy: .11, sw: .33, sh: .28, dw: 68, dh: 58 },
+      bat: { sx: .5, sy: .09, sw: .5, sh: .29, dw: 76, dh: 44 },
+      mushroom: { sx: .07, sy: .52, sw: .35, sh: .34, dw: 58, dh: 57 },
+      guardian: { sx: .48, sy: .45, sw: .5, sh: .46, dw: 136, dh: 125 }
+    }[enemy.type];
+    const bob = enemy.type === 'bat' ? Math.sin(time * .012 + enemy.id) * 5 : 0;
+    if (enemy.type === 'guardian' && enemy.phaseTwo) {
+      ctx.globalAlpha = .22; ctx.fillStyle = '#ff547d';
+      ctx.beginPath(); ctx.arc(x + enemy.w / 2, y + enemy.h / 2, 68 + Math.sin(time * .01) * 5, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = enemy.hurt > 0 ? .5 : 1;
+    }
+    ctx.translate(x + enemy.w / 2, y + enemy.h + bob);
+    ctx.scale(enemy.vx > 0 ? -1 : 1, 1);
+    ctx.drawImage(
+      enemyImage, sprite.sx * sheetW, sprite.sy * sheetH, sprite.sw * sheetW, sprite.sh * sheetH,
+      -sprite.dw / 2, -sprite.dh, sprite.dw, sprite.dh
+    );
+    ctx.restore();
+    if (enemy.type === 'guardian') {
+      drawPixelRect(x - 18, y - 28, 132, 7, '#291e35');
+      drawPixelRect(x - 18, y - 28, 132 * (enemy.hp / enemy.maxHp), 7, enemy.phaseTwo ? '#ffd36e' : '#ec6680');
+      ctx.fillStyle = '#fff0cf'; ctx.font = '8px Pixelify Sans'; ctx.textAlign = 'center';
+      ctx.fillText(enemy.phaseTwo ? 'CORAÇÃO DE ESPINHOS · FASE 2' : 'CORAÇÃO DE ESPINHOS', x + 48, y - 35);
+    }
+    return;
+  }
   if (enemy.type === 'thorn') {
     drawPixelRect(x + 5, y + 10, 32, 22, '#655071'); drawPixelRect(x + 10, y + 5, 7, 10, '#8d6a91'); drawPixelRect(x + 25, y + 3, 7, 12, '#8d6a91');
     drawPixelRect(x + 11, y + 17, 5, 5, '#ffd782'); drawPixelRect(x + 27, y + 17, 5, 5, '#ffd782');
@@ -732,15 +884,27 @@ function drawFriend(time) {
 function drawBanner() {
   if (banner.time <= 0) return;
   const alpha = Math.min(1, banner.time * 2);
-  ctx.globalAlpha = alpha; ctx.fillStyle = 'rgba(38,26,52,.88)'; ctx.fillRect(42, 118, canvas.width - 84, 42);
-  ctx.strokeStyle = '#e4ae73'; ctx.strokeRect(46, 122, canvas.width - 92, 34);
-  ctx.fillStyle = '#ffe3a8'; ctx.font = '10px Pixelify Sans'; ctx.textAlign = 'center'; ctx.fillText(banner.text, canvas.width / 2, 143); ctx.globalAlpha = 1;
+  ctx.globalAlpha = alpha; ctx.font = '9px Pixelify Sans';
+  const words = banner.text.split(' '), lines = [];
+  let line = '';
+  for (const word of words) {
+    const candidate = line ? `${line} ${word}` : word;
+    if (ctx.measureText(candidate).width > canvas.width - 118 && line) { lines.push(line); line = word; }
+    else line = candidate;
+  }
+  if (line) lines.push(line);
+  const height = 25 + lines.length * 13, top = 111;
+  ctx.fillStyle = 'rgba(38,26,52,.88)'; ctx.fillRect(42, top, canvas.width - 84, height);
+  ctx.strokeStyle = '#e4ae73'; ctx.strokeRect(46, top + 4, canvas.width - 92, height - 8);
+  ctx.fillStyle = '#ffe3a8'; ctx.textAlign = 'center';
+  lines.forEach((textLine, index) => ctx.fillText(textLine, canvas.width / 2, top + 20 + index * 13));
+  ctx.globalAlpha = 1;
 }
 
 function draw(time = 0) {
   ctx.save();
   if (screenShake > 0) ctx.translate((Math.random() - .5) * screenShake, (Math.random() - .5) * screenShake);
-  drawBackground(); if (state !== 'title') drawWorld(time);
+  drawBackground(time); if (state !== 'title') drawWorld(time);
   ctx.restore();
 }
 
@@ -771,6 +935,10 @@ addEventListener('keyup', e => {
 });
 ui.startButton.addEventListener('click', startGame);
 ui.replay.addEventListener('click', startGame);
+ui.arenaRetry.addEventListener('click', retryArena);
 ui.restart.addEventListener('click', startGame);
-ui.sound.addEventListener('click', () => { soundOn = !soundOn; ui.sound.textContent = soundOn ? '♪' : '×'; });
+ui.sound.addEventListener('click', () => {
+  soundOn = !soundOn; ui.sound.textContent = soundOn ? '♪' : '×';
+  if (soundOn) { ensureAudio(); startMusic(); sfx('start'); }
+});
 requestAnimationFrame(loop);

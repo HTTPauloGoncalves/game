@@ -234,7 +234,20 @@ h1 em { color: #ffad7e; font-style: normal; }
 .broken-heart { color: #f08a98; font: 52px Georgia, serif; line-height: 1; margin-bottom: 18px; }
 .death-card h2 { margin: 14px 0; color: #ffd7bc; font: 600 25px/1.05 "Pixelify Sans", sans-serif; }
 .death-card p { margin: 0 auto 28px; color: #cdbdce; font-size: 11px; line-height: 1.7; }
-.death-card .primary-button { width: 240px; }
+.death-actions { width: 100%; display: grid; justify-items: center; gap: 11px; }
+.death-card .primary-button { width: min(100%, 270px); font-size: 10px; }
+.secondary-button {
+  width: min(100%, 240px);
+  min-height: 44px;
+  border: 1px solid #a95d76;
+  border-radius: 5px;
+  color: #f6d5d7;
+  background: rgba(255,255,255,.06);
+  font: 600 10px "Pixelify Sans", sans-serif;
+  letter-spacing: .13em;
+  cursor: pointer;
+}
+.secondary-button:active { transform: translateY(2px); background: rgba(255,255,255,.12); }
 
 [hidden] { display: none !important; }
 @keyframes letter-open { from { opacity: 0; transform: translateY(50px) scale(.88) rotate(2deg); } }

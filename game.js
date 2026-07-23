@@ -28,6 +28,8 @@ const friendImage = new Image();
 friendImage.src = 'assets/letter-giver.png';
 const enemyImage = new Image();
 enemyImage.src = 'assets/enemies.png';
+const crouchImage = new Image();
+crouchImage.src = 'assets/hero-crouch.png';
 
 const WORLD_WIDTH = 6100;
 const GROUND_Y = 678;
@@ -36,6 +38,8 @@ const FRIEND_X = 4660;
 const PORTAL_X = 4075;
 const ARENA_LEFT = 5160;
 const ARENA_RIGHT = 5920;
+const HERO_STAND_HEIGHT = 72;
+const HERO_CROUCH_HEIGHT = 47;
 const GROUND_SEGMENTS = [
   [0, 640], [775, 1340], [1495, 2160], [2300, 2920],
   [3075, 3650], [3810, 4800], [5080, 6000]
@@ -116,11 +120,12 @@ const ENEMY_DEFS = [
   { type: 'guardian', x: 5650, range: 150, hp: 450 }
 ];
 
-const keys = { left: false, right: false };
+const keys = { left: false, right: false, crouch: false };
 const hero = {
-  x: 80, y: GROUND_Y - 74, w: 44, h: 72, vx: 0, vy: 0,
+  x: 80, y: GROUND_Y - 74, w: 44, h: HERO_STAND_HEIGHT, vx: 0, vy: 0,
   grounded: true, facing: 1, anim: 0, invulnerable: 0, shootCooldown: 0,
-  attackTimer: 0, pendingShot: null, checkpoint: 80, hp: 1, maxHp: 1
+  attackTimer: 0, attackCrouched: false, pendingShot: null, crouching: false,
+  checkpoint: 80, hp: 1, maxHp: 1
 };
 
 let state = 'title';
@@ -156,10 +161,11 @@ function createEnemies() {
 
 function reset() {
   Object.assign(hero, {
-    x: 80, y: GROUND_Y - 74, vx: 0, vy: 0, grounded: true, facing: 1,
-    invulnerable: 0, shootCooldown: 0, attackTimer: 0, pendingShot: null,
+    x: 80, y: GROUND_Y - 74, w: 44, h: HERO_STAND_HEIGHT, vx: 0, vy: 0, grounded: true, facing: 1,
+    invulnerable: 0, shootCooldown: 0, attackTimer: 0, attackCrouched: false, pendingShot: null, crouching: false,
     checkpoint: 80, hp: 1, maxHp: 1
   });
+  keys.left = keys.right = keys.crouch = false;
   heartItems.forEach(h => h.got = false);
   heartsFound = 0; camera = 0; particles = []; projectiles = []; enemyShots = [];
   enemies = createEnemies(); banner.time = 0; bannerQueue = []; screenShake = 0;
@@ -219,26 +225,36 @@ function startMusic() {
 
 function jump() {
   if (state === 'playing' && hero.grounded) {
+    setHeroCrouching(false);
     hero.vy = -680; hero.grounded = false; sfx('jump');
   }
+}
+
+function setHeroCrouching(shouldCrouch) {
+  if (shouldCrouch === hero.crouching) return;
+  const bottom = hero.y + hero.h;
+  hero.crouching = shouldCrouch;
+  hero.h = shouldCrouch ? HERO_CROUCH_HEIGHT : HERO_STAND_HEIGHT;
+  hero.y = bottom - hero.h;
 }
 
 function shootRose() {
   if (state !== 'playing' || hero.shootCooldown > 0) return;
   const level = heartsFound;
   hero.attackTimer = .34;
-  hero.pendingShot = { delay: .13, level };
+  hero.attackCrouched = hero.crouching;
+  hero.pendingShot = { delay: .13, level, crouched: hero.crouching };
   hero.shootCooldown = Math.max(.2, .52 - level * .038);
   sfx('rose');
 }
 
-function releaseRoseVolley(level) {
+function releaseRoseVolley(level, crouched = false) {
   const spread = level >= 8 ? [-.34, -.17, 0, .17, .34] : level >= 5 ? [-.2, 0, .2] : level >= 2 ? [-.07, .07] : [0];
   const speed = 390 + level * 22;
   const damage = 1 + Math.floor(level / 3);
   spread.forEach(angle => projectiles.push({
     x: hero.x + hero.w / 2 + hero.facing * 28,
-    y: hero.y + 29,
+    y: hero.y + hero.h - (crouched ? 27 : 43),
     vx: Math.cos(angle) * speed * hero.facing,
     vy: Math.sin(angle) * speed,
     life: 1.65,
@@ -288,6 +304,7 @@ function hurtHero(sourceX) {
   if (state !== 'playing' || hero.invulnerable > 0) return;
   hero.hp--; updateHealthUI();
   if (hero.hp <= 0) { gameOver(); return; }
+  setHeroCrouching(false);
   hero.invulnerable = 1.15;
   hero.vx = hero.x < sourceX ? -310 : 310;
   hero.vy = -390; hero.grounded = false;
@@ -296,6 +313,7 @@ function hurtHero(sourceX) {
 }
 
 function respawnFromHole() {
+  hero.h = HERO_STAND_HEIGHT; hero.crouching = false; hero.attackCrouched = false;
   hero.x = hero.checkpoint; hero.y = GROUND_Y - hero.h;
   hero.vx = 0; hero.vy = 0; hero.grounded = true; hero.invulnerable = 1.2;
   camera = Math.max(0, hero.x - 100); screenShake = 12;
@@ -313,7 +331,7 @@ function fallInHole() {
 function gameOver() {
   if (state === 'gameover') return;
   const canRetryArena = arenaState === 'intro' || arenaState === 'active' || arenaState === 'victory';
-  state = 'gameover'; keys.left = keys.right = false; hero.vx = 0;
+  state = 'gameover'; keys.left = keys.right = keys.crouch = false; hero.vx = 0;
   projectiles = []; enemyShots = [];
   ui.controls.hidden = true; ui.hint.hidden = true; ui.death.hidden = false; ui.arenaRetry.hidden = !canRetryArena;
   sfx('hurt');
@@ -326,9 +344,10 @@ function retryArena() {
     alive: true, hurt: 0, shoot: 1.25, phaseTwo: false, announced: false
   });
   Object.assign(hero, {
-    x: ARENA_LEFT + 70, y: GROUND_Y - hero.h, vx: 0, vy: 0,
+    x: ARENA_LEFT + 70, y: GROUND_Y - HERO_STAND_HEIGHT, h: HERO_STAND_HEIGHT, vx: 0, vy: 0,
     grounded: true, invulnerable: 1.5, shootCooldown: 0, attackTimer: 0,
-    pendingShot: null, checkpoint: ARENA_LEFT + 70, hp: hero.maxHp
+    attackCrouched: false, pendingShot: null, crouching: false,
+    checkpoint: ARENA_LEFT + 70, hp: hero.maxHp
   });
   state = 'playing'; arenaState = 'intro'; arenaTimer = 1.65;
   camera = ARENA_LEFT - 35; projectiles = []; enemyShots = []; particles = []; bannerQueue = [];
@@ -341,18 +360,20 @@ function updateHero(dt) {
   hero.invulnerable = Math.max(0, hero.invulnerable - dt);
   hero.shootCooldown = Math.max(0, hero.shootCooldown - dt);
   hero.attackTimer = Math.max(0, hero.attackTimer - dt);
+  setHeroCrouching(keys.crouch && hero.grounded);
   if (hero.pendingShot) {
     hero.pendingShot.delay -= dt;
     if (hero.pendingShot.delay <= 0) {
-      releaseRoseVolley(hero.pendingShot.level);
+      releaseRoseVolley(hero.pendingShot.level, hero.pendingShot.crouched);
       hero.pendingShot = null;
     }
   }
-  const accel = hero.grounded ? 1600 : 930;
+  const accel = hero.crouching ? 720 : hero.grounded ? 1600 : 930;
   if (keys.left) { hero.vx -= accel * dt; hero.facing = -1; }
   if (keys.right) { hero.vx += accel * dt; hero.facing = 1; }
   if (!keys.left && !keys.right) hero.vx *= Math.pow(.0008, dt);
-  hero.vx = Math.max(-265, Math.min(265, hero.vx));
+  const maxSpeed = hero.crouching ? 105 : 265;
+  hero.vx = Math.max(-maxSpeed, Math.min(maxSpeed, hero.vx));
 
   const prevBottom = hero.y + hero.h;
   hero.vy += 1780 * dt; hero.x += hero.vx * dt; hero.y += hero.vy * dt;
@@ -383,6 +404,7 @@ function updateHero(dt) {
   const boss = enemies.find(e => e.type === 'guardian');
   if (arenaState === 'waiting' && hero.x > PORTAL_X) {
     arenaState = 'intro'; arenaTimer = 1.65;
+    setHeroCrouching(false);
     hero.x = ARENA_LEFT + 70; hero.y = GROUND_Y - hero.h;
     hero.vx = 0; hero.vy = 0; hero.grounded = true; hero.checkpoint = ARENA_LEFT + 70;
     camera = ARENA_LEFT - 35;
@@ -509,7 +531,7 @@ function update(dt, time) {
 }
 
 function finishGame() {
-  state = 'finished'; keys.left = keys.right = false; hero.vx = 0;
+  state = 'finished'; keys.left = keys.right = keys.crouch = false; hero.vx = 0; setHeroCrouching(false);
   ui.controls.hidden = true; ui.hint.hidden = true;
   sfx('victory');
   setTimeout(() => { ui.letter.hidden = false; }, 700);
@@ -742,14 +764,29 @@ function drawEnemy(enemy, time) {
       mushroom: { sx: .07, sy: .52, sw: .35, sh: .34, dw: 58, dh: 57 },
       guardian: { sx: .48, sy: .45, sw: .5, sh: .46, dw: 136, dh: 125 }
     }[enemy.type];
-    const bob = enemy.type === 'bat' ? Math.sin(time * .012 + enemy.id) * 5 : 0;
+    const cycle = Math.sin(time * .012 + enemy.id * 1.7);
+    let bob = 0, scaleX = 1, scaleY = 1, rotation = 0;
+    if (enemy.type === 'thorn') {
+      bob = -Math.abs(cycle) * 3; scaleX = 1 + cycle * .035; scaleY = 1 - cycle * .035; rotation = cycle * .025;
+    } else if (enemy.type === 'bat') {
+      bob = cycle * 6; scaleY = .88 + Math.abs(Math.cos(time * .016 + enemy.id)) * .16; rotation = cycle * .055;
+    } else if (enemy.type === 'mushroom') {
+      bob = -Math.abs(cycle) * 5; rotation = cycle * .045;
+      if (enemy.shoot < .28) { scaleX = .91; scaleY = 1.1; }
+    } else {
+      const pulse = Math.sin(time * .007);
+      bob = -1 - Math.abs(pulse) * 2; scaleX = 1 + pulse * .025; scaleY = 1 - pulse * .018;
+      if (enemy.shoot < .22) { scaleX *= .92; scaleY *= 1.08; rotation = cycle * .018; }
+    }
     if (enemy.type === 'guardian' && enemy.phaseTwo) {
       ctx.globalAlpha = .22; ctx.fillStyle = '#ff547d';
       ctx.beginPath(); ctx.arc(x + enemy.w / 2, y + enemy.h / 2, 68 + Math.sin(time * .01) * 5, 0, Math.PI * 2); ctx.fill();
       ctx.globalAlpha = enemy.hurt > 0 ? .5 : 1;
     }
-    ctx.translate(x + enemy.w / 2, y + enemy.h + bob);
-    ctx.scale(enemy.vx > 0 ? -1 : 1, 1);
+    const hurtShake = enemy.hurt > 0 ? Math.sin(time * .09) * 4 : 0;
+    ctx.translate(x + enemy.w / 2 + hurtShake, y + enemy.h + bob);
+    ctx.rotate(rotation);
+    ctx.scale((enemy.vx > 0 ? -1 : 1) * scaleX, scaleY);
     ctx.drawImage(
       enemyImage, sprite.sx * sheetW, sprite.sy * sheetH, sprite.sw * sheetW, sprite.sh * sheetH,
       -sprite.dw / 2, -sprite.dh, sprite.dw, sprite.dh
@@ -822,6 +859,28 @@ function drawParticle(p) {
 }
 
 function drawHero() {
+  const crouchPose = hero.crouching || (hero.attackTimer > 0 && hero.attackCrouched);
+  if (crouchPose && crouchImage.complete && crouchImage.naturalWidth) {
+    const frame = hero.attackTimer > 0 && hero.attackCrouched
+      ? (hero.pendingShot ? 2 : 3)
+      : Math.floor(hero.anim * 1.6) % 2;
+    const column = frame % 2, row = Math.floor(frame / 2);
+    const sx = Math.round(column * crouchImage.width / 2);
+    const sy = Math.round(row * crouchImage.height / 2);
+    const sxEnd = Math.round((column + 1) * crouchImage.width / 2);
+    const syEnd = Math.round((row + 1) * crouchImage.height / 2);
+    const size = 128, bottom = hero.y + hero.h;
+    ctx.save();
+    const cx = hero.x - camera + hero.w / 2;
+    if (hero.invulnerable > 0 && Math.floor(hero.invulnerable * 14) % 2) ctx.globalAlpha = .35;
+    ctx.translate(cx, 0); ctx.scale(hero.facing, 1);
+    ctx.drawImage(
+      crouchImage, sx, sy, sxEnd - sx, syEnd - sy,
+      -size / 2, Math.round(bottom - size + (row ? 35 : 25)), size, size
+    );
+    ctx.restore();
+    return;
+  }
   const running = hero.attackTimer <= 0 && hero.grounded && Math.abs(hero.vx) > 25;
   if (running && heroImage.complete && heroImage.naturalWidth) {
     const frame = RUN_SEQUENCE[Math.floor(hero.anim) % RUN_SEQUENCE.length];
@@ -926,12 +985,14 @@ document.querySelectorAll('[data-control]').forEach(b => bindHold(b, b.dataset.c
 addEventListener('keydown', e => {
   if (['ArrowLeft', 'a', 'A'].includes(e.key)) keys.left = true;
   if (['ArrowRight', 'd', 'D'].includes(e.key)) keys.right = true;
+  if (['ArrowDown', 's', 'S'].includes(e.key)) { e.preventDefault(); keys.crouch = true; }
   if (['ArrowUp', 'w', 'W', ' '].includes(e.key)) { e.preventDefault(); jump(); }
   if (['x', 'X', 'k', 'K', 'Enter'].includes(e.key)) { e.preventDefault(); shootRose(); }
 });
 addEventListener('keyup', e => {
   if (['ArrowLeft', 'a', 'A'].includes(e.key)) keys.left = false;
   if (['ArrowRight', 'd', 'D'].includes(e.key)) keys.right = false;
+  if (['ArrowDown', 's', 'S'].includes(e.key)) keys.crouch = false;
 });
 ui.startButton.addEventListener('click', startGame);
 ui.replay.addEventListener('click', startGame);
